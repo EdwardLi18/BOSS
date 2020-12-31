@@ -56,7 +56,8 @@ parser.add_argument('--balance', type=int, default=0,
                      help='Balance class methods to use (default=0 None)')
 parser.add_argument('--delT', type=float, default=0.2,
                      help='Class balance threshold delta (default=0.2)')
-
+parser.add_argument('--cuda-enabled', type=int, default=1,
+                     help='Whether to use CUDA: 1 for True, 0 for False (default=1)')
 args = parser.parse_args()
 print(args)
 
@@ -73,9 +74,15 @@ def set_model():
     model = WideResnet(
         args.n_classes, k=args.wresnet_k, n=args.wresnet_n) # wresnet-28-2
     model.train()
-    # model.cuda()
-    criteria_x = nn.CrossEntropyLoss()#.cuda()
-    criteria_u = nn.CrossEntropyLoss()#.cuda()
+    criteria_x = None
+    criteria_u = None
+    if args.cuda_enabled:
+        model.cuda()
+        criteria_x = nn.CrossEntropyLoss().cuda()
+        criteria_u = nn.CrossEntropyLoss().cuda()
+    else:
+        criteria_x = nn.CrossEntropyLoss()
+        criteria_u = nn.CrossEntropyLoss()
     return model, criteria_x, criteria_u
 
 
@@ -102,12 +109,12 @@ def train_one_epoch(
     for it in range(n_iters):
         ims_x_weak, ims_x_strong, lbs_x = next(dl_x)
         ims_u_weak, ims_u_strong, lbs_u_real = next(dl_u)
-        
-        ims_x_strong = ims_x_strong#.cuda()
-        ims_x_weak = ims_x_weak#.cuda()
-        lbs_x = lbs_x#.cuda()
-        ims_u_weak = ims_u_weak#.cuda()
-        ims_u_strong = ims_u_strong#.cuda()
+        if args.cuda_enabled:
+            ims_x_strong = ims_x_strong.cuda()
+            ims_x_weak = ims_x_weak.cuda()
+            lbs_x = lbs_x.cuda()
+            ims_u_weak = ims_u_weak.cuda()
+            ims_u_strong = ims_u_strong.cuda()
 
 #        lbs_u, valid_u, mask_u = lb_guessor(model, ims_u_weak)
         lbs_u, valid_u, mask_u, loss_u_std  = lb_guessor(model, ims_u_weak, args.balance, args.delT)
@@ -207,13 +214,15 @@ def printCounts(model, ims, balance):
 def evaluate(ema):
     ema.apply_shadow()
     ema.model.eval()
-    #ema.model.cuda()
+    if args.cuda_enabled:
+        ema.model.cuda()
 
     dlval = get_val_loader(batch_size=128, num_workers=0, root='cifar10')
     matches = []
     for ims, lbs in dlval:
-        ims = ims#.cuda()
-        lbs = lbs#.cuda()
+        if args.cuda_enabled:
+            ims = ims.cuda()
+            lbs = lbs.cuda()
         with torch.no_grad():
             logits = ema.model(ims)
             scores = torch.softmax(logits, dim=1)
@@ -238,13 +247,16 @@ def check_path(path):
 def sort_unlabeled(ema):
     ema.apply_shadow()
     ema.model.eval()
-    ema.model#.cuda()
+    if args.cuda_enabled:
+        ema.model.cuda()
 
     dltrain_x, dltrain_u = get_train_loader(
         10, 2000, 1, L=args.n_labeled, seed=args.seed)
     matches = []
     for ims_w, ims_s, lbs in  dltrain_u:
-        ims = ims_w#.cuda()
+        ims = ims_w
+        if args.cuda_enabled:
+            ims = ims_w.cuda()
         with torch.no_grad():
             logits = ema.model(ims)
             scores = torch.softmax(logits, dim=1)
