@@ -2,6 +2,7 @@ import random
 import time
 import argparse
 import sys
+import os
 
 import numpy as np
 
@@ -72,9 +73,9 @@ def set_model():
     model = WideResnet(
         args.n_classes, k=args.wresnet_k, n=args.wresnet_n) # wresnet-28-2
     model.train()
-    model.cuda()
-    criteria_x = nn.CrossEntropyLoss().cuda()
-    criteria_u = nn.CrossEntropyLoss().cuda()
+    # model.cuda()
+    criteria_x = nn.CrossEntropyLoss()#.cuda()
+    criteria_u = nn.CrossEntropyLoss()#.cuda()
     return model, criteria_x, criteria_u
 
 
@@ -102,11 +103,11 @@ def train_one_epoch(
         ims_x_weak, ims_x_strong, lbs_x = next(dl_x)
         ims_u_weak, ims_u_strong, lbs_u_real = next(dl_u)
         
-        ims_x_strong = ims_x_strong.cuda()
-        ims_x_weak = ims_x_weak.cuda()
-        lbs_x = lbs_x.cuda()
-        ims_u_weak = ims_u_weak.cuda()
-        ims_u_strong = ims_u_strong.cuda()
+        ims_x_strong = ims_x_strong#.cuda()
+        ims_x_weak = ims_x_weak#.cuda()
+        lbs_x = lbs_x#.cuda()
+        ims_u_weak = ims_u_weak#.cuda()
+        ims_u_strong = ims_u_strong#.cuda()
 
 #        lbs_u, valid_u, mask_u = lb_guessor(model, ims_u_weak)
         lbs_u, valid_u, mask_u, loss_u_std  = lb_guessor(model, ims_u_weak, args.balance, args.delT)
@@ -125,7 +126,7 @@ def train_one_epoch(
 
             loss = loss_x + lambda_u * loss_u + lambda_c * loss_u_std
             with torch.no_grad():
-                lbs_u_real = lbs_u_real[valid_u].cuda()
+                lbs_u_real = lbs_u_real[valid_u] #.cuda()
                 corr_lb = lbs_u_real == lbs_u
                 loss_u_real = F.cross_entropy(logits_u, lbs_u_real)
         else:
@@ -206,13 +207,13 @@ def printCounts(model, ims, balance):
 def evaluate(ema):
     ema.apply_shadow()
     ema.model.eval()
-    ema.model.cuda()
+    #ema.model.cuda()
 
     dlval = get_val_loader(batch_size=128, num_workers=0, root='cifar10')
     matches = []
     for ims, lbs in dlval:
-        ims = ims.cuda()
-        lbs = lbs.cuda()
+        ims = ims#.cuda()
+        lbs = lbs#.cuda()
         with torch.no_grad():
             logits = ema.model(ims)
             scores = torch.softmax(logits, dim=1)
@@ -225,16 +226,25 @@ def evaluate(ema):
     ema.restore()
     return acc
 
+def check_path(path):
+    """
+    Given a string that represents the path
+    Checks if this path exists
+    If it doesn't, it creates the path
+    """
+    if not(os.path.exists(path)):
+        os.makedirs(path)
+
 def sort_unlabeled(ema):
     ema.apply_shadow()
     ema.model.eval()
-    ema.model.cuda()
+    ema.model#.cuda()
 
     dltrain_x, dltrain_u = get_train_loader(
         10, 2000, 1, L=args.n_labeled, seed=args.seed)
     matches = []
     for ims_w, ims_s, lbs in  dltrain_u:
-        ims = ims_w.cuda()
+        ims = ims_w#.cuda()
         with torch.no_grad():
             logits = ema.model(ims)
             scores = torch.softmax(logits, dim=1)
@@ -245,6 +255,7 @@ def sort_unlabeled(ema):
 #    print(predictions[top[0:100]])
 #    print(preds[top[0:100]])
 #    print(top[0:1000])
+    check_path("dataset/pseudolabels/top/") # check to see if the directory exists
     name = "dataset/pseudolabels/top/top_preds"+"cifar10pB"+str(args.balance)+"."+str(args.seed)
     name = name+"WD"+str(args.weight_decay)+"LR"+str(args.lr)+"DT"+str(args.delT)+"T"+str(args.thr)
     np.save(name ,top[0:1000])

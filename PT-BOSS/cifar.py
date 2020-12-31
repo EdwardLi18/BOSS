@@ -208,8 +208,8 @@ class OneHot(object):
         N, *S = label.size()
         size = [N, self.n_labels] + S
         lb_one_hot = torch.zeros(size)
-        if label.is_cuda:
-            lb_one_hot = lb_one_hot.cuda()
+        # if label.is_cuda:
+        #     lb_one_hot = lb_one_hot.cuda()
         ignore = label.data.cpu() == self.lb_ignore
         label[ignore] = 0
         lb_one_hot.scatter_(1, label.unsqueeze(1), 1)
